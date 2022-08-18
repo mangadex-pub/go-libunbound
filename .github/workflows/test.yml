@@ -28,6 +28,7 @@ jobs:
 
       - name: Get dependencies
         run: |
+          apt -qq update && apt -qq -y install --no-install-recommends libunbound-dev libunbound8
           go mod download
 
       - name: Build
