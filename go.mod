@@ -1,4 +1,4 @@
-module github.com/mangadex-pub/unbound
+module github.com/mangadex-pub/go-libunbound
 
 go 1.18
 
