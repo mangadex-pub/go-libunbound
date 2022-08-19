@@ -204,6 +204,42 @@ func (u *Unbound) Hosts(fname string) error {
 	return newError(int(i))
 }
 
+var maxCnameChaseDepth uint8 = 5
+
+func (u *Unbound) ResolveMaxDepth(name string, rrtype, rrclass uint16, calls uint8) (*Result, error) {
+	res, err := u.Resolve(name, rrtype, rrclass)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// No data and no nxdomain; problem could be *.domain in CNAME abcd, try again with CNAME
+	if !res.HaveData && !res.NxDomain && calls < maxCnameChaseDepth {
+		clookup, cerr := u.ResolveMaxDepth(name, dns.TypeCNAME, rrclass, calls+1)
+		if cerr != nil {
+			return nil, cerr
+		} else {
+			if !clookup.HaveData {
+				return clookup, nil
+			} else {
+				// we got a CNAME match, re-issue the request against its resolved value, prepending the CNAME's lookup response
+				// thankfully there can only be a single CNAME matching, even if wildcard
+				cnameRr := clookup.Rr[0]
+				reResolve, reResolveErr := u.ResolveMaxDepth(cnameRr.Header().Name, rrtype, rrclass, calls+1)
+				if reResolveErr != nil {
+					return nil, reResolveErr
+				} else {
+					reResolve.Rr = append(reResolve.Rr[:1], reResolve.Rr[0:]...)
+					reResolve.Rr[0] = cnameRr
+					return reResolve, nil
+				}
+			}
+		}
+	} else {
+		return res, nil
+	}
+}
+
 // Resolve wraps Unbound's ub_resolve.
 func (u *Unbound) Resolve(name string, rrtype, rrclass uint16) (*Result, error) {
 	name = dns.Fqdn(name)
